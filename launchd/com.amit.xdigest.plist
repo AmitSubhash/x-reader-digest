@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.amit.xdigest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/amit/Projects/x-reader-digest/.venv/bin/python</string>
+        <string>-m</string>
+        <string>xdigest.pipeline</string>
+        <string>run</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/amit/Projects/x-reader-digest</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/amit/Projects/x-reader-digest/src</string>
+        <key>PATH</key>
+        <string>/Users/amit/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/amit</string>
+    </dict>
+
+    <!-- Run every morning at 06:30 so the draft is waiting when you wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/amit/Projects/x-reader-digest/logs/xdigest.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/amit/Projects/x-reader-digest/logs/xdigest.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ruff_cache/
+.venv/
+out/
+logs/
+state/
+# secrets / local auth (never commit)
+*token*.json
+accounts.db
+x_cookies.txt
+# personal worklog, not for the public repo
+DECISIONS.md
