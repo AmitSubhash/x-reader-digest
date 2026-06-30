@@ -16,12 +16,13 @@ import datetime as dt
 import json
 import pathlib
 import subprocess
+from dataclasses import asdict
 
 from . import store
 from .extract import extract
 from .render import render_html, render_text, subject
 from .site import generate as generate_site
-from .summarize import summarize_item
+from .summarize import analyze
 
 CONFIG_PATH = pathlib.Path.home() / ".config" / "xdigest" / "config.json"
 OUT_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "out"
@@ -43,26 +44,50 @@ def _exclude(item) -> bool:
     return item.kind in {"tweet", "other"}
 
 
-def process_urls(tasks: list[dict], model: str) -> list[dict]:
-    """Extract and summarize each link task, skipping excluded links.
+def _build_record(repost, resource, enrichment: dict | None) -> dict:
+    """Assemble an archive record from a repost and its (optional) resource."""
+    if resource is not None:
+        record = asdict(resource)
+    else:
+        record = {
+            "source_url": "", "final_url": "", "kind": "tweet", "title": "",
+            "text": "", "meta": {}, "reading_minutes": 0, "error": None,
+        }
+    record["enrichment"] = enrichment
+    record["date"] = repost.date
+    record["id"] = repost.tweet_id
+    record["author"] = repost.author
+    record["author_name"] = repost.author_name
+    record["repost_text"] = repost.text
+    record["type"] = (enrichment or {}).get("type") or ("resource" if resource else "claim")
+    record["key"] = record["final_url"] or f"tweet:{repost.tweet_id}"
+    record["recommended"] = store.is_recommended(record)
+    return record
 
-    Each task is {"url", "date", "id"}; the repost date and tweet id are stamped
-    onto the record so the site can sort and show when you reposted it.
-    """
-    enriched: list[dict] = []
-    for task in tasks:
-        url = task["url"]
-        item = extract(url)
-        if _exclude(item):
-            print(f"  skip ({item.kind}{' pdf' if (item.meta or {}).get('pdf') else ''}): {url}")
-            continue
-        print("  ->", url)
-        record = summarize_item(item, model=model)
-        record["recommended"] = store.is_recommended(record)
-        record["date"] = task.get("date", "")
-        record["id"] = task.get("id", 0)
-        enriched.append(record)
-    return enriched
+
+def process_reposts(reposts, model: str) -> list[dict]:
+    """Analyze each repost: summarize a linked resource, or explain a claim."""
+    records: list[dict] = []
+    for repost in reposts:
+        resource = None
+        for url in repost.urls:
+            item = extract(url)
+            if _exclude(item):
+                continue
+            resource = item
+            break
+        if resource is None and len((repost.text or "").strip()) < 30:
+            continue  # no readable link and no substantive claim
+        enrichment = analyze(
+            {"text": repost.text, "author": repost.author, "author_name": repost.author_name},
+            resource,
+            model=model,
+        )
+        record = _build_record(repost, resource, enrichment)
+        label = record.get("title") or (repost.text or "")[:60]
+        print(f"  [{record['type']}] @{repost.author or '-'}: {label[:70]}")
+        records.append(record)
+    return records
 
 
 def _git_push(repo: pathlib.Path, message: str) -> None:
@@ -101,13 +126,14 @@ def _maybe_push_phone(config: dict, text: str) -> None:
         print(f"  [push] skipped: {exc}")
 
 
-def _gather_urls(args) -> tuple[list[dict], int]:
-    """Return (link_tasks, newest_tweet_id) for the chosen source.
-
-    Each task is {"url", "date", "id"} carrying the repost date and tweet id.
-    """
+def _gather_reposts(args) -> tuple[list, int]:
+    """Return (reposts, newest_tweet_id) for the chosen source."""
     if args.urls:
-        return [{"url": u, "date": "", "id": 0} for u in dict.fromkeys(args.urls)], 0
+        from .capture import Repost
+
+        reposts = [Repost(tweet_id=0, date="", kind="manual", text="", urls=[u])
+                   for u in dict.fromkeys(args.urls)]
+        return reposts, 0
     from .capture import fetch_backfill, fetch_new_reposts
 
     if args.since:
@@ -115,37 +141,27 @@ def _gather_urls(args) -> tuple[list[dict], int]:
     else:
         advance = not args.dry_run and not args.no_state
         reposts = fetch_new_reposts(limit=args.limit, update_state=advance)
-
-    tasks: list[dict] = []
-    seen_urls: set[str] = set()
-    newest = 0
-    for repost in reposts:
-        newest = max(newest, repost.tweet_id)
-        for url in repost.urls:
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-            tasks.append({"url": url, "date": repost.date, "id": repost.tweet_id})
-    return tasks, newest
+    newest = max((r.tweet_id for r in reposts), default=0)
+    return reposts, newest
 
 
 def run(args) -> int:
     """Execute one run (daily or backfill). Returns a process exit code."""
     config = _load_config()
-    tasks, newest = _gather_urls(args)
-    if not args.urls:  # skip links already archived, so we never re-summarize
-        seen = store.load_seen_urls()
-        tasks = [t for t in tasks if t["url"] not in seen]
-    if not tasks:
-        print("no new reposts with links; nothing to do")
+    reposts, newest = _gather_reposts(args)
+    if not args.urls:  # skip reposts already archived, so we never re-analyze
+        seen_ids = store.load_seen_tweet_ids()
+        reposts = [r for r in reposts if str(r.tweet_id) not in seen_ids]
+    if not reposts:
+        print("no new reposts; nothing to do")
         return 0
 
-    print(f"processing {len(tasks)} link(s)")
-    enriched = process_urls(tasks, args.model)
+    print(f"processing {len(reposts)} repost(s)")
+    enriched = process_reposts(reposts, args.model)
 
     # Split into genuinely new items (not yet archived) for the email.
-    seen = store.load_seen_urls()
-    new_items = [e for e in enriched if e.get("final_url") and e["final_url"] not in seen]
+    seen = store.load_seen_keys()
+    new_items = [e for e in enriched if store.item_key(e) not in seen]
 
     OUT_DIR.mkdir(exist_ok=True)
     if args.dry_run:

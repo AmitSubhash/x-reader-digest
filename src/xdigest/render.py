@@ -41,9 +41,10 @@ def _badge(label: str, verdict: Optional[str]) -> str:
 
 
 def _counts(items: list[dict]) -> str:
-    articles = sum(1 for i in items if i["kind"] == "article")
-    videos = sum(1 for i in items if i["kind"] == "youtube")
-    return f"{len(items)} items ({articles} articles, {videos} videos)"
+    claims = sum(1 for i in items if i.get("type") == "claim")
+    videos = sum(1 for i in items if i.get("type") != "claim" and i.get("kind") == "youtube")
+    reads = len(items) - claims - videos
+    return f"{len(items)} items ({reads} to read, {videos} videos, {claims} claims)"
 
 
 def subject(items: list[dict]) -> str:
@@ -56,8 +57,29 @@ def _render_item_html(item: dict) -> str:
     title = html.escape(item.get("title") or item.get("final_url") or "Link")
     url = html.escape(item.get("final_url") or item.get("source_url") or "")
     parts = ['<div class="item">']
+    author = item.get("author") or ""
 
-    if item["kind"] == "youtube":
+    if item.get("type") == "claim":
+        headline = html.escape(enrich.get("headline") or (item.get("repost_text") or "")[:90] or "Claim")
+        parts.append('<div class="kind">Claim</div>')
+        parts.append(f'<div class="title">{headline}</div>')
+        if author:
+            parts.append(f'<div class="meta">@{html.escape(author)}</div>')
+        parts.append('<div class="badges">')
+        parts.append(_badge("Research", enrich.get("research_verdict")))
+        parts.append(_badge("General", enrich.get("general_verdict")))
+        parts.append("</div>")
+        if item.get("repost_text"):
+            parts.append(f'<div class="gist">&ldquo;{html.escape(item["repost_text"])}&rdquo;</div>')
+        if enrich.get("context"):
+            parts.append(f'<div class="article-body">{md.markdown(enrich["context"], extensions=["extra"])}</div>')
+        for label, key in (("Research", "research_reason"), ("General", "general_reason")):
+            if enrich.get(key):
+                parts.append(f'<div class="reason"><b>{label}:</b> {html.escape(enrich[key])}</div>')
+        if url:
+            parts.append(f'<div class="reason">Link: <a href="{url}">{html.escape(item.get("title") or url)}</a></div>')
+
+    elif item["kind"] == "youtube":
         meta = item.get("meta") or {}
         parts.append('<div class="kind">Video</div>')
         parts.append(f'<div class="title"><a href="{url}">{title}</a></div>')
@@ -136,13 +158,30 @@ def render_text(items: list[dict]) -> str:
     for item in items:
         enrich = item.get("enrichment") or {}
         lines.append("-" * 60)
-        lines.append(f"[{item['kind'].upper()}] {item.get('title', '')}")
-        lines.append(item.get("final_url", ""))
-        if item["kind"] != "tweet":
+        if item.get("type") == "claim":
+            author = item.get("author") or ""
+            lines.append(f"[CLAIM] {enrich.get('headline', '') or (item.get('repost_text', '')[:80])}")
+            if author:
+                lines.append(f"@{author}")
             lines.append(
                 f"Research: {enrich.get('research_verdict', '?')} | "
                 f"General: {enrich.get('general_verdict', '?')}"
             )
+            if item.get("repost_text"):
+                lines.append(f'Reposted: "{item["repost_text"]}"')
+            if enrich.get("context"):
+                lines.append("")
+                lines.append(enrich["context"])
+            if item.get("final_url"):
+                lines.append(f"Link: {item['final_url']}")
+            lines.append("")
+            continue
+        lines.append(f"[{item['kind'].upper()}] {item.get('title', '')}")
+        lines.append(item.get("final_url", ""))
+        lines.append(
+            f"Research: {enrich.get('research_verdict', '?')} | "
+            f"General: {enrich.get('general_verdict', '?')}"
+        )
         if enrich.get("gist"):
             lines.append(f"Gist: {enrich['gist']}")
         for bullet in enrich.get("summary", []):

@@ -33,13 +33,19 @@ _SKIP_HOSTS = {"twitter.com", "x.com", "www.twitter.com", "www.x.com", "t.co", "
 
 @dataclass
 class Repost:
-    """A single repost (retweet or quote) carrying external links."""
+    """A single repost (retweet): the original tweet's text, author, and links.
+
+    Text-only reposts (a claim or opinion with no link) are kept too, so the
+    digest can analyze the claim, not just summarize an article.
+    """
 
     tweet_id: int
     date: str
-    kind: str  # "retweet" or "quote"
+    kind: str  # "retweet"
     text: str
     urls: list[str] = field(default_factory=list)
+    author: str = ""
+    author_name: str = ""
 
 
 def _external_urls(tweet) -> list[str]:
@@ -153,15 +159,19 @@ async def _fetch(
         if source is None:
             continue
         urls = _external_urls(source) or _external_urls(tweet)
-        if not urls:
-            continue
+        text = (getattr(source, "rawContent", "") or "").strip()
+        if not urls and len(text) < 30:
+            continue  # skip trivial link-less reactions, keep substantive claims
+        user = getattr(source, "user", None)
         reposts.append(
             Repost(
                 tweet_id=tweet.id,
                 date=tweet_date.isoformat() if tweet_date else "",
                 kind="retweet",
-                text=(getattr(source, "rawContent", "") or "")[:500],
+                text=text[:1500],
                 urls=urls,
+                author=(getattr(user, "username", "") or ""),
+                author_name=(getattr(user, "displayname", "") or ""),
             )
         )
 

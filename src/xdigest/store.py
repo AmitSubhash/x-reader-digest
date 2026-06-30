@@ -42,8 +42,13 @@ def is_recommended(item: dict) -> bool:
     )
 
 
-def load_seen_urls() -> set[str]:
-    """Return the set of resolved URLs already archived."""
+def item_key(item: dict) -> str:
+    """Stable dedup key: the resolved URL, or tweet:<id> for text-only claims."""
+    return item.get("key") or item.get("final_url") or f"tweet:{item.get('id', '')}"
+
+
+def load_seen_keys() -> set[str]:
+    """Return the set of dedup keys already archived."""
     path = items_path()
     if not path.exists():
         return set()
@@ -53,14 +58,33 @@ def load_seen_urls() -> set[str]:
         if not line:
             continue
         try:
-            seen.add(json.loads(line).get("final_url", ""))
+            seen.add(item_key(json.loads(line)))
+        except json.JSONDecodeError:
+            continue
+    return seen
+
+
+def load_seen_tweet_ids() -> set[str]:
+    """Return the set of archived repost tweet ids (for pre-filtering capture)."""
+    path = items_path()
+    if not path.exists():
+        return set()
+    seen: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            tid = json.loads(line).get("id")
+            if tid:
+                seen.add(str(tid))
         except json.JSONDecodeError:
             continue
     return seen
 
 
 def append_items(items: list[dict]) -> int:
-    """Append new items to the archive, skipping URLs already present.
+    """Append new items to the archive, skipping keys already present.
 
     Returns
     -------
@@ -69,15 +93,15 @@ def append_items(items: list[dict]) -> int:
     """
     path = items_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    seen = load_seen_urls()
+    seen = load_seen_keys()
     written = 0
     with path.open("a", encoding="utf-8") as handle:
         for item in items:
-            url = item.get("final_url", "")
-            if not url or url in seen:
+            key = item_key(item)
+            if not key or key == "tweet:" or key in seen:
                 continue
             handle.write(json.dumps(item, ensure_ascii=False) + "\n")
-            seen.add(url)
+            seen.add(key)
             written += 1
     return written
 

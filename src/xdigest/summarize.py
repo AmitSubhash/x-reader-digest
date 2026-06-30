@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 from dataclasses import asdict
+from typing import Optional
 
 from .extract import ExtractedItem
 
@@ -157,3 +158,69 @@ def summarize_item(item: ExtractedItem, model: str = "sonnet") -> dict:
 def summarize_all(items: list[ExtractedItem], model: str = "sonnet") -> list[dict]:
     """Summarize a list of extracted items sequentially."""
     return [summarize_item(item, model=model) for item in items]
+
+
+def _analyze_prompt(repost: dict, resource: Optional[ExtractedItem]) -> str:
+    """Build the unified per-repost prompt (resource summary or claim context)."""
+    author = repost.get("author", "")
+    author_name = repost.get("author_name", "")
+    repost_text = (repost.get("text") or "").strip()
+
+    if resource is not None and resource.text:
+        kind = "video" if resource.kind == "youtube" else resource.kind
+        source = (resource.meta or {}).get("sitename") or (resource.meta or {}).get("channel") or ""
+        resource_block = (
+            f"It links to a {kind}: \"{resource.title}\" ({source}).\n"
+            f"Content excerpt:\n{resource.text[:8000]}"
+        )
+    else:
+        resource_block = "There is no readable external link; the substance is the tweet itself."
+
+    return f"""You are triaging one X repost for Amit so his morning reading actually makes sense, not just a link dump.
+
+{RESEARCH_PROFILE}
+
+The repost (originally posted by @{author}, {author_name}):
+\"\"\"{repost_text}\"\"\"
+
+{resource_block}
+
+Decide the TYPE:
+- "resource": the repost is essentially sharing something to read or watch; the value is the linked content.
+- "claim": the repost makes an assertion, opinion, recommendation, or references a person / paper / lab / idea, where Amit needs context to understand WHY it was said.
+
+Return ONLY a JSON object, no prose, no code fences:
+- "type": "resource" or "claim".
+- "headline": one short line naming what this is.
+- "context": for a CLAIM, 3 to 6 sentences that (a) restate the claim plainly, (b) identify and briefly explain any person, paper, lab, or concept referenced (who they are, what they did, and a couple of their key works if a researcher), and (c) explain why the claim was made or what background makes it make sense. For a resource, "".
+- "gist": for a resource ARTICLE or PDF, one sentence on what it argues. Else "".
+- "summary": for a resource VIDEO, an array of 3 to 5 short bullet strings. Else [].
+- "research_verdict": "READ"/"WATCH" or "SKIP", judged on relevance to Amit's research above. Count research-craft, how-to-do-research, taste, and PhD advice as research-relevant.
+- "research_reason": one sentence.
+- "general_verdict": "READ"/"WATCH" or "SKIP", judged on general signal and learning value.
+- "general_reason": one sentence.
+- "time_note": for videos, payoff versus runtime; else "".
+Do not use em dashes anywhere. Use commas or parentheses instead."""
+
+
+def analyze(repost: dict, resource: Optional[ExtractedItem], model: str = "sonnet") -> Optional[dict]:
+    """Analyze one repost: summarize a resource or explain a claim.
+
+    Parameters
+    ----------
+    repost : dict
+        The repost with "text", "author", "author_name".
+    resource : ExtractedItem, optional
+        The extracted linked content, or None for a text-only claim.
+    model : str
+        Model alias for `claude -p`.
+
+    Returns
+    -------
+    dict or None
+        The validated enrichment, or None if the model call failed.
+    """
+    try:
+        return _parse_json(claude_p(_analyze_prompt(repost, resource), model=model))
+    except (RuntimeError, ValueError, json.JSONDecodeError):
+        return None

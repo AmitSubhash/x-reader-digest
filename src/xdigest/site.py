@@ -15,6 +15,8 @@ from .store import is_recommended
 
 
 def _display_kind(item: dict) -> str:
+    if item.get("type") == "claim":
+        return "claim"
     if item.get("kind") == "youtube":
         return "video"
     if (item.get("meta") or {}).get("pdf"):
@@ -28,14 +30,19 @@ def build_site_data(items: list[dict]) -> list[dict]:
     for item in items:
         enrich = item.get("enrichment") or {}
         meta = item.get("meta") or {}
+        is_claim = item.get("type") == "claim"
+        title = (enrich.get("headline") or item.get("repost_text", "")) if is_claim else item.get("title")
         rows.append(
             {
                 "id": str(item.get("id") or item.get("final_url", "")),
                 "date": item.get("date", ""),
                 "kind": _display_kind(item),
-                "title": item.get("title") or item.get("final_url", "Link"),
+                "title": title or item.get("final_url", "Link"),
                 "url": item.get("final_url") or item.get("source_url", ""),
                 "source": meta.get("sitename") or meta.get("channel") or "",
+                "author": item.get("author", ""),
+                "repost_text": item.get("repost_text", "") if is_claim else "",
+                "context": enrich.get("context", "") if is_claim else "",
                 "reading_minutes": item.get("reading_minutes", 0),
                 "gist": enrich.get("gist", ""),
                 "summary": enrich.get("summary", []),
@@ -72,7 +79,7 @@ main{max-width:760px;margin:0 auto;padding:16px 18px 60px;}
 .card{background:#fff;border:1px solid #e6e6e6;border-radius:10px;padding:16px;margin-bottom:14px;}
 .row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}
 .kind{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:#888;border-radius:4px;padding:2px 6px;}
-.kind.video{background:#b1442c;}.kind.pdf{background:#7a5a1d;}.kind.article{background:#3a6;}
+.kind.video{background:#b1442c;}.kind.pdf{background:#7a5a1d;}.kind.article{background:#3a6;}.kind.claim{background:#5b3a8a;}
 .date{color:#999;font-size:12px;}
 .title{font-size:16px;font-weight:600;margin:6px 0;}
 .title a{color:#0a4d8c;text-decoration:none;}
@@ -81,6 +88,7 @@ main{max-width:760px;margin:0 auto;padding:16px 18px 60px;}
 .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;margin-right:6px;}
 .go{background:#e6f4ea;color:#1d7a3a;}.no{background:#f0f0f0;color:#888;}
 .gist{font-style:italic;color:#333;margin:6px 0;}
+.ctx{color:#2a2a2a;font-size:14px;margin:8px 0;line-height:1.5;}
 .reason{color:#555;font-size:13px;margin:2px 0;}
 ul{margin:6px 0;padding-left:18px;}li{margin:3px 0;font-size:14px;}
 .time{color:#9a6a00;font-size:12px;font-weight:600;}
@@ -95,6 +103,7 @@ ul{margin:6px 0;padding-left:18px;}li{margin:3px 0;font-size:14px;}
     <button data-f="all">All</button>
     <button data-f="skipped">Skipped</button>
     <button data-k="all" class="on kindbtn">Any</button>
+    <button data-k="claim" class="kindbtn">Claims</button>
     <button data-k="article" class="kindbtn">Articles</button>
     <button data-k="video" class="kindbtn">Videos</button>
     <button data-k="pdf" class="kindbtn">PDFs</button>
@@ -112,24 +121,28 @@ function match(it){
   if(state.f==="recommended" && !it.recommended) return false;
   if(state.f==="skipped" && it.recommended) return false;
   if(state.k!=="all" && it.kind!==state.k) return false;
-  if(state.q){const hay=(it.title+" "+it.source+" "+it.gist+" "+(it.summary||[]).join(" ")).toLowerCase();
+  if(state.q){const hay=(it.title+" "+it.source+" "+it.gist+" "+(it.summary||[]).join(" ")+" "+(it.context||"")+" "+(it.repost_text||"")).toLowerCase();
     if(!hay.includes(state.q)) return false;}
   return true;
 }
 function card(it){
+  const isClaim=it.kind==="claim";
   const sum=(it.summary&&it.summary.length)?`<ul>${it.summary.map(b=>`<li>${esc(b)}</li>`).join("")}</ul>`:"";
-  const gist=it.gist?`<div class="gist">${esc(it.gist)}</div>`:"";
+  const gist=(!isClaim&&it.gist)?`<div class="gist">${esc(it.gist)}</div>`:"";
+  const quote=(isClaim&&it.repost_text)?`<div class="gist">&ldquo;${esc(it.repost_text)}&rdquo;</div>`:"";
+  const ctx=(isClaim&&it.context)?`<div class="ctx">${esc(it.context)}</div>`:"";
   const rr=it.research_reason?`<div class="reason"><b>Research:</b> ${esc(it.research_reason)}</div>`:"";
   const gr=it.general_reason?`<div class="reason"><b>General:</b> ${esc(it.general_reason)}</div>`:"";
   const tn=it.time_note?`<div class="time">${esc(it.time_note)}</div>`:"";
   const mins=it.reading_minutes?`${it.reading_minutes} min`:"";
-  const meta=[it.source,mins].filter(Boolean).join(" &middot; ");
+  const meta=isClaim?(it.author?("@"+esc(it.author)):""):[esc(it.source),mins].filter(Boolean).join(" &middot; ");
+  const titleHtml=it.url?`<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`:esc(it.title);
   return `<div class="card"><div class="row"><span class="kind ${it.kind}">${it.kind}</span>
     <span class="date">${esc((it.date||"").slice(0,10))}</span></div>
-    <div class="title"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a></div>
+    <div class="title">${titleHtml}</div>
     <div class="meta">${meta}</div>
     <div class="badges">${badge("Research",it.research_verdict)}${badge("General",it.general_verdict)}</div>
-    ${gist}${sum}${rr}${gr}${tn}</div>`;
+    ${quote}${gist}${ctx}${sum}${rr}${gr}${tn}</div>`;
 }
 function render(){
   const rows=DATA.filter(match);
