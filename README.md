@@ -1,102 +1,104 @@
-# x-reader-digest
+<div align="center">
 
-Turn your X (Twitter) reposts into a calm email digest you can read after you
-wake up, instead of scrolling X. Each reposted link is followed and worked on:
+<img src="assets/banner.svg" alt="x-reader-digest" width="100%">
 
-- **Articles** are pulled in full (clean readable text inline), plus a one-line
-  gist and two "worth your time" labels.
-- **Videos** get a short summary, a watch-or-skip call, and a runtime-vs-payoff
-  note, so you do not gamble 20 minutes on a video blind.
+<p>
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-6ea8fe">
+  <img alt="python" src="https://img.shields.io/badge/python-3.11%2B-6ea8fe">
+  <img alt="llm" src="https://img.shields.io/badge/LLM-claude%20--p%20(no%20API%20key)-b18cff">
+  <img alt="delivery" src="https://img.shields.io/badge/delivery-email%20%2B%20web-2e8b57">
+</p>
 
-Every item carries two verdicts side by side: **research relevance** (DOT,
-fNIRS, ML for medical imaging, inverse problems) and **general value**.
+<b>Turn your X reposts into a calm reading digest you actually get through.</b><br>
+Articles delivered in full. Videos triaged with a watch-or-skip call. Opinions and
+claims explained (who is referenced, why it was said). Ranked by your taste, sent
+to your inbox each morning, and browsable on a filterable site.
 
-The result is delivered as a **Gmail draft to yourself** (you tap send, or just
-read the draft), built on a launchd timer each morning.
+</div>
+
+---
+
+## Why
+
+You repost a lot on X and never get back to it. This follows each reposted link
+and does the work so reading is calm, not a scroll:
+
+- **Articles** are pulled in full (clean text inline), plus a one-line gist.
+- **Videos** get a transcript-based summary and a watch-or-skip call, so you do
+  not gamble 20 minutes blind. Lectures get a thorough summary.
+- **Claims and opinions** (a tweet with no article, like "study Tero Karras's
+  papers") get a who/what/why explanation and links to dig deeper.
+
+Every item carries two verdicts, research relevance and general value, and a
+**read-more** row built from the people, papers, and concepts it mentions.
 
 ## How it works
 
 ```
-capture (twscrape + Brave cookies)
-   ->  extract (trafilatura article / pypdf PDF / yt-dlp + transcript)
-   ->  summarize (claude -p, sonnet, no API key)
-   ->  render (HTML email)  ->  draft (Mail.app via AppleScript, or Gmail)
+capture (twscrape + Brave cookies, retweets only)
+   ->  extract (trafilatura article / pypdf PDF / yt-dlp + transcript video)
+   ->  analyze (claude -p, sonnet: resource summary or claim explanation, verdicts, score)
+   ->  archive (JSONL, incremental)  ->  rank by taste
+   ->  render (responsive email)  ->  send / draft  ->  rebuild filterable site  ->  push
 ```
 
-No paid X API and no LLM API key: reposts are public timeline data read with
-your own Brave session, and summaries run through your local `claude -p`
-subscription. PDFs (papers, lecture notes, books) are extracted too; long ones
-are inlined in part and linked in full.
+No paid X API and no LLM API key: reposts are public timeline data read with your
+own Brave session, and analysis runs through your local `claude -p` subscription.
+
+## Your taste
+
+[`TASTE.md`](TASTE.md) is the heart of the feed. Edit it in plain prose to say
+what you love, what to always surface, what to skip, and how to score. The digest
+reads it to triage every repost and **rank your daily feed**. Keep a private
+taste by copying it to `~/.config/xdigest/taste.md` (that path wins).
 
 ## One-time setup
 
-1. **Delivery (Mail.app, default).** Drafts are saved to your `Exchange`
-   account's Drafts via AppleScript and never sent. The only setup is allowing
-   the process to control Mail the first time (a macOS prompt; click OK). No
-   account auth. To draft from a different Mail account, set its name in config.
-   (Optional alternative: Gmail drafts via `draft_backend: "gmail"` in config
-   plus `PYTHONPATH=src .venv/bin/python -m xdigest.draft auth`.)
-
-2. **X session via Brave.** Capture reads your live X cookies from the local
-   Brave browser on every run, so there is nothing to paste and nothing to
-   expire. The only setup is authorizing the Keychain once: run the line below
-   and click **Always Allow** on the dialog (this lets the scheduled job read
-   Brave's cookie key unattended). It prints cookie shapes, no secrets.
+1. **Install**
+   ```
+   uv venv .venv && uv pip install -r requirements.txt
+   ```
+2. **X session via Brave.** Capture reads your live X cookies from Brave each run
+   (nothing to paste, nothing to expire). Authorize the Keychain once and click
+   Always Allow:
    ```
    PYTHONPATH=src .venv/bin/python -m xdigest.brave_cookies
    ```
-   Stay logged into X in Brave's Default profile and capture keeps working.
-
-3. **Optional config** at `~/.config/xdigest/config.json`:
+3. **Delivery.** Set `~/.config/xdigest/config.json`:
    ```json
-   { "to_address": "atsubhas@iu.edu" }
+   { "to_address": "you@example.com", "send": true, "data_repo": "/path/to/x-reader-digest-data" }
    ```
+   `send: true` sends to yourself via the Gmail API (reuses a paper2kindle-style
+   token); omit it to save a Mail.app draft instead.
 
 ## Run it
 
 ```
-# build from your new reposts and create the Gmail draft
-PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run
-
-# preview only: write out/latest_digest.html, no draft, no state change
-PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run --dry-run
-
-# test on explicit links, skipping capture
-PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run --dry-run --urls <url1> <url2>
+PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run            # daily
+PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run --dry-run  # preview, no send
+PYTHONPATH=src .venv/bin/python -m xdigest.pipeline backfill 2026-05-01   # catch up (resumable)
 ```
 
 ## Data and website
 
-Processed items are archived as JSONL in a separate **private** data repo
-(`data_repo` in config), and a filterable website is regenerated from that
-archive into `docs/` on every run. Each run commits and pushes the data repo,
-so your reading history and site stay versioned on GitHub.
+Processed items are archived as JSONL in a separate **private** data repo, and a
+filterable site is regenerated from it each run (`docs/index.html`): ranked
+newest-and-best first, filter by Recommended / Skipped / Claims / Articles /
+Videos / PDFs, with search. Enable GitHub Pages on `docs/` to host it.
 
-- `data/items.jsonl` durable archive (one item per line, deduped by URL).
-- `docs/index.html` filterable site: sorted newest first, filter by
-  Recommended / Skipped / kind, search. Open locally, or enable GitHub Pages.
-
-Catch up over a date range (retweets only, recommended items in the email,
-everything archived):
-
-```
-PYTHONPATH=src .venv/bin/python -m xdigest.pipeline backfill 2026-05-01
-```
-
-## Schedule (launchd)
+## Schedule
 
 ```
 cp launchd/com.amit.xdigest.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.amit.xdigest.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.amit.xdigest.plist
 ```
 
-Runs daily at 06:30. Edit `StartCalendarInterval` to change the time. Logs land
-in `logs/`.
+Runs daily at 06:00; the reading is waiting when you wake.
 
 ## Notes
 
-- Capture refreshes cookies from Brave each run, so it survives cookie
-  expiry. If `fetch` ever returns nothing, confirm you are still logged into X
-  in Brave; if X changed its internals, bump the `twscrape` version.
-- Verdicts and summaries are written by `claude -p --model sonnet`; no em dashes
-  by instruction.
+- Retweets only (quote-tweets excluded). Book PDFs (over 30 pages) and junk hosts
+  are skipped. Code snippets are stripped from article bodies.
+- Cookie-based capture rides X's internals; if `fetch` goes empty, confirm you
+  are still logged into X in Brave.
+- No em dashes, by instruction.

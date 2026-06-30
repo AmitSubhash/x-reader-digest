@@ -9,6 +9,7 @@ produces a short summary plus a watch verdict; for articles it produces two
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 import subprocess
 from dataclasses import asdict
@@ -31,6 +32,27 @@ RESEARCH_PROFILE = (
     "marked READ, ideally on both axes, because he wants to read all of it. Lean strongly toward READ "
     "whenever an item plausibly touches any of these."
 )
+
+# A user can override the built-in profile by editing TASTE.md (in the repo) or
+# ~/.config/xdigest/taste.md. This is what makes the feed personal and rankable.
+_TASTE_PATHS = (
+    pathlib.Path.home() / ".config" / "xdigest" / "taste.md",
+    pathlib.Path(__file__).resolve().parent.parent.parent / "TASTE.md",
+)
+
+
+def load_profile() -> str:
+    """Return the reader's taste profile: a taste file if present, else the default."""
+    for path in _TASTE_PATHS:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if "\n---\n" in text:  # use the active taste below the how-to intro
+            text = text.split("\n---\n", 1)[1].strip()
+        if text:
+            return text
+    return RESEARCH_PROFILE
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -185,9 +207,11 @@ def _analyze_prompt(repost: dict, resource: Optional[ExtractedItem]) -> str:
     else:
         resource_block = "There is no readable external link; the substance is the tweet itself."
 
-    return f"""You are triaging one X repost for Amit so his morning reading actually makes sense, not just a link dump.
+    profile = load_profile()
+    return f"""You are triaging one X repost for the reader so their morning reading actually makes sense, not just a link dump.
 
-{RESEARCH_PROFILE}
+The reader's taste (use this to judge relevance and the score):
+{profile}
 
 The repost (originally posted by @{author}, {author_name}):
 \"\"\"{repost_text}\"\"\"
@@ -204,10 +228,11 @@ Return ONLY a JSON object, no prose, no code fences:
 - "context": for a CLAIM, 3 to 6 sentences that (a) restate the claim plainly, (b) identify and briefly explain any person, paper, lab, or concept referenced (who they are, what they did, and a couple of their key works if a researcher), and (c) explain why the claim was made or what background makes it make sense. For a resource, "".
 - "gist": for a resource ARTICLE or PDF, one sentence on what it argues. Else "".
 - "summary": for a resource VIDEO, an array of 3 to 5 short bullet strings. If it is a lecture or talk, be thorough and capture the main points actually taught (use the transcript). Else [].
-- "research_verdict": "READ"/"WATCH" or "SKIP", judged on relevance to Amit's research above. Count research-craft, how-to-do-research, taste, and PhD advice as research-relevant.
+- "research_verdict": "READ"/"WATCH" or "SKIP", judged on relevance to the reader's taste above. Count research-craft, how-to-do-research, taste, and PhD advice as relevant.
 - "research_reason": one sentence.
 - "general_verdict": "READ"/"WATCH" or "SKIP", judged on general signal and learning value.
 - "general_reason": one sentence.
+- "score": integer 0 to 10, how strongly this matches the reader's taste and is worth their time (10 = must read, 0 = ignore); used to rank the feed.
 - "time_note": for videos, payoff versus runtime; else "".
 - "references": array (up to 4) of objects {{"name": str, "kind": "person"|"paper"|"lab"|"tool"|"concept"}} naming the people, papers, labs, tools, or concepts a curious reader should look up to understand this repost. [] if none.
 - "read_more": a short, specific web-search query (5 to 10 words) to dig deeper into the core topic.

@@ -25,6 +25,14 @@ def _display_kind(item: dict) -> str:
     return item.get("kind", "article")
 
 
+def rank_score(item: dict) -> float:
+    """Taste-match score for ranking; falls back when an item has no score."""
+    score = (item.get("enrichment") or {}).get("score")
+    if isinstance(score, (int, float)):
+        return float(score)
+    return 7.0 if is_recommended(item) else 3.0
+
+
 def build_site_data(items: list[dict]) -> list[dict]:
     """Project archived items into the lightweight shape the page renders."""
     rows: list[dict] = []
@@ -57,9 +65,11 @@ def build_site_data(items: list[dict]) -> list[dict]:
                 "general_reason": enrich.get("general_reason", ""),
                 "time_note": enrich.get("time_note", ""),
                 "links": links,
+                "score": round(rank_score(item), 1),
                 "recommended": is_recommended(item),
             }
         )
+    rows.sort(key=lambda r: (r["score"], r["date"]), reverse=True)  # ranked feed
     return rows
 
 
