@@ -26,6 +26,7 @@ on run argv
   set bodyFile to item 4 of argv
   set attachFile to item 5 of argv
   set bodyText to (read (POSIX file bodyFile as alias) as «class utf8»)
+  set sendMode to (item 6 of argv)
   with timeout of 90 seconds
     tell application "Mail"
       set newMsg to make new outgoing message with properties {subject:subj, content:bodyText, visible:false}
@@ -38,7 +39,11 @@ on run argv
           tell newMsg to make new attachment with properties {file name:(POSIX file attachFile as alias)} at after the last paragraph of content
         end try
       end if
-      save newMsg
+      if sendMode is "send" then
+        send newMsg
+      else
+        save newMsg
+      end if
     end tell
   end timeout
   return "ok"
@@ -53,8 +58,9 @@ def create_draft(
     html_path: Optional[str] = None,
     account: str = DEFAULT_ACCOUNT,
     timeout: float = 120.0,
+    send: bool = False,
 ) -> None:
-    """Save a Mail.app draft (never sends).
+    """Save a Mail.app draft, or send it when send=True.
 
     Parameters
     ----------
@@ -70,6 +76,9 @@ def create_draft(
         Mail.app account name to draft from.
     timeout : float
         Subprocess timeout in seconds.
+    send : bool
+        When True, send the message instead of saving a draft. Only use with an
+        explicit per-message approval.
 
     Raises
     ------
@@ -80,7 +89,7 @@ def create_draft(
         handle.write(text_body)
         body_file = handle.name
 
-    args = [account, to_address, subject, body_file, html_path or ""]
+    args = [account, to_address, subject, body_file, html_path or "", "send" if send else "draft"]
     try:
         proc = subprocess.run(
             ["osascript", "-", *args],

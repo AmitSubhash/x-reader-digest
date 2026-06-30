@@ -186,15 +186,21 @@ def run(args) -> int:
 
     if not args.no_draft:
         to_address = config.get("to_address", DEFAULT_TO)
-        if config.get("draft_backend") == "gmail":
+        if config.get("send"):  # explicit opt-in: send to yourself, no manual step
+            from .gmailsend import send
+
+            mid = send(to_address, subj, html_body, text_body)
+            print(f"sent to {to_address}: {subj} (id {mid})")
+        elif config.get("draft_backend") == "gmail":
             from .draft import create_draft
 
             create_draft(to_address, subj, html_body, text_body)
+            print(f"created Gmail draft to {to_address}: {subj}")
         else:
             from .mailapp import create_draft
 
             create_draft(to_address, subj, text_body, html_path=str(OUT_DIR / "latest_digest.html"))
-        print(f"created draft to {to_address}: {subj}")
+            print(f"created Mail.app draft to {to_address}: {subj}")
         _maybe_push_phone(config, f"Morning reads ready: {len(recommended_new)} cool items")
     return 0
 
