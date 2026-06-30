@@ -65,8 +65,13 @@ def _build_record(repost, resource, enrichment: dict | None) -> dict:
     return record
 
 
-def process_reposts(reposts, model: str) -> list[dict]:
-    """Analyze each repost: summarize a linked resource, or explain a claim."""
+def process_reposts(reposts, model: str, archive: bool = False) -> list[dict]:
+    """Analyze each repost: summarize a linked resource, or explain a claim.
+
+    When archive=True each record is appended to the store as soon as it is
+    built, so a long run is resumable: if it is killed, re-running skips the
+    reposts already archived and continues.
+    """
     records: list[dict] = []
     for repost in reposts:
         resource = None
@@ -84,8 +89,10 @@ def process_reposts(reposts, model: str) -> list[dict]:
             model=model,
         )
         record = _build_record(repost, resource, enrichment)
+        if archive:
+            store.append_items([record])
         label = record.get("title") or (repost.text or "")[:60]
-        print(f"  [{record['type']}] @{repost.author or '-'}: {label[:70]}")
+        print(f"  [{record['type']}] @{repost.author or '-'}: {label[:70]}", flush=True)
         records.append(record)
     return records
 
@@ -157,11 +164,10 @@ def run(args) -> int:
         return 0
 
     print(f"processing {len(reposts)} repost(s)")
-    enriched = process_reposts(reposts, args.model)
-
-    # Split into genuinely new items (not yet archived) for the email.
-    seen = store.load_seen_keys()
-    new_items = [e for e in enriched if store.item_key(e) not in seen]
+    # Archive incrementally inside process_reposts (unless dry-run) so the run is
+    # resumable; reposts were already filtered to ones not yet archived.
+    enriched = process_reposts(reposts, args.model, archive=not args.dry_run)
+    new_items = enriched
 
     OUT_DIR.mkdir(exist_ok=True)
     if args.dry_run:
@@ -172,8 +178,8 @@ def run(args) -> int:
               f"wrote {OUT_DIR / 'latest_digest.html'} (no archive, draft, or push)")
         return 0
 
-    # Archive everything new, then rebuild the site from the full archive.
-    added = store.append_items(new_items)
+    # Items were archived incrementally; rebuild the site from the full archive.
+    added = len(new_items)
     all_items = store.load_all_items()
     docs_dir = store.data_repo() / "docs"
     site_count = generate_site(all_items, docs_dir)
