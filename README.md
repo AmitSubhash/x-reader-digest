@@ -65,6 +65,24 @@ PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run --dry-run
 PYTHONPATH=src .venv/bin/python -m xdigest.pipeline run --dry-run --urls <url1> <url2>
 ```
 
+## Data and website
+
+Processed items are archived as JSONL in a separate **private** data repo
+(`data_repo` in config), and a filterable website is regenerated from that
+archive into `docs/` on every run. Each run commits and pushes the data repo,
+so your reading history and site stay versioned on GitHub.
+
+- `data/items.jsonl` durable archive (one item per line, deduped by URL).
+- `docs/index.html` filterable site: sorted newest first, filter by
+  Recommended / Skipped / kind, search. Open locally, or enable GitHub Pages.
+
+Catch up over a date range (retweets only, recommended items in the email,
+everything archived):
+
+```
+PYTHONPATH=src .venv/bin/python -m xdigest.pipeline backfill 2026-05-01
+```
+
 ## Schedule (launchd)
 
 ```
