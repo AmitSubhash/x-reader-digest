@@ -23,9 +23,13 @@ RESEARCH_PROFILE = (
     "diffuse optical tomography (DOT), fNIRS, neonatal and medical brain imaging, Monte Carlo "
     "photon transport, and inverse problems; reinforcement learning (RL) of any flavor; machine "
     "learning and deep learning broadly (architectures, training, theory, evals); computational and "
-    "medical imaging; and agent engineering / agentic AI / LLM tooling, orchestration, and prompting "
-    "(he builds a lot of this with Claude Max and enjoys it). Also count research-craft, "
-    "how-to-do-research, taste, and PhD advice. Lean toward READ when an item plausibly touches any of these."
+    "medical imaging; agent engineering / agentic AI / LLM tooling, orchestration, and prompting "
+    "(he builds a lot of this with Claude Max and enjoys it); and GPU kernel programming and low-level "
+    "performance work (CUDA, Triton, kernels, GPU optimization), which he is actively curious about. "
+    "ADVICE IS A TOP PRIORITY: any advice at all (research advice, research-craft, how-to-do-research, "
+    "taste, career and job advice, PhD and mentorship advice, productivity, life and work wisdom) MUST be "
+    "marked READ, ideally on both axes, because he wants to read all of it. Lean strongly toward READ "
+    "whenever an item plausibly touches any of these."
 )
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
