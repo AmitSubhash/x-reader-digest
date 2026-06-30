@@ -200,6 +200,8 @@ Return ONLY a JSON object, no prose, no code fences:
 - "general_verdict": "READ"/"WATCH" or "SKIP", judged on general signal and learning value.
 - "general_reason": one sentence.
 - "time_note": for videos, payoff versus runtime; else "".
+- "references": array (up to 4) of objects {{"name": str, "kind": "person"|"paper"|"lab"|"tool"|"concept"}} naming the people, papers, labs, tools, or concepts a curious reader should look up to understand this repost. [] if none.
+- "read_more": a short, specific web-search query (5 to 10 words) to dig deeper into the core topic.
 Do not use em dashes anywhere. Use commas or parentheses instead."""
 
 
@@ -220,7 +222,8 @@ def analyze(repost: dict, resource: Optional[ExtractedItem], model: str = "sonne
     dict or None
         The validated enrichment, or None if the model call failed.
     """
+    prompt = _analyze_prompt(repost, resource)  # build outside try so bugs surface
     try:
-        return _parse_json(claude_p(_analyze_prompt(repost, resource), model=model))
+        return _parse_json(claude_p(prompt, model=model))
     except (RuntimeError, ValueError, json.JSONDecodeError):
         return None

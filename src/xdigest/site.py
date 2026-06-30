@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import pathlib
 
+from .links import read_more_url, reference_links
 from .store import is_recommended
 
 
@@ -32,6 +33,10 @@ def build_site_data(items: list[dict]) -> list[dict]:
         meta = item.get("meta") or {}
         is_claim = item.get("type") == "claim"
         title = (enrich.get("headline") or item.get("repost_text", "")) if is_claim else item.get("title")
+        links = [list(pair) for pair in reference_links(enrich.get("references"))]
+        rm = read_more_url(enrich.get("read_more", ""))
+        if rm:
+            links.append(["search this topic", rm])
         rows.append(
             {
                 "id": str(item.get("id") or item.get("final_url", "")),
@@ -51,6 +56,7 @@ def build_site_data(items: list[dict]) -> list[dict]:
                 "general_verdict": (enrich.get("general_verdict") or "").upper(),
                 "general_reason": enrich.get("general_reason", ""),
                 "time_note": enrich.get("time_note", ""),
+                "links": links,
                 "recommended": is_recommended(item),
             }
         )
@@ -89,6 +95,7 @@ main{max-width:760px;margin:0 auto;padding:16px 18px 60px;}
 .go{background:#e6f4ea;color:#1d7a3a;}.no{background:#f0f0f0;color:#888;}
 .gist{font-style:italic;color:#333;margin:6px 0;}
 .ctx{color:#2a2a2a;font-size:14px;margin:8px 0;line-height:1.5;}
+.rl{margin:8px 0 0;font-size:12px;color:#888;}.rl a{color:#0a4d8c;text-decoration:none;}
 .reason{color:#555;font-size:13px;margin:2px 0;}
 ul{margin:6px 0;padding-left:18px;}li{margin:3px 0;font-size:14px;}
 .time{color:#9a6a00;font-size:12px;font-weight:600;}
@@ -137,12 +144,13 @@ function card(it){
   const mins=it.reading_minutes?`${it.reading_minutes} min`:"";
   const meta=isClaim?(it.author?("@"+esc(it.author)):""):[esc(it.source),mins].filter(Boolean).join(" &middot; ");
   const titleHtml=it.url?`<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`:esc(it.title);
+  const rl=(it.links&&it.links.length)?`<div class="rl">Read more: ${it.links.map(l=>`<a href="${esc(l[1])}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join(" &middot; ")}</div>`:"";
   return `<div class="card"><div class="row"><span class="kind ${it.kind}">${it.kind}</span>
     <span class="date">${esc((it.date||"").slice(0,10))}</span></div>
     <div class="title">${titleHtml}</div>
     <div class="meta">${meta}</div>
     <div class="badges">${badge("Research",it.research_verdict)}${badge("General",it.general_verdict)}</div>
-    ${quote}${gist}${ctx}${sum}${rr}${gr}${tn}</div>`;
+    ${quote}${gist}${ctx}${sum}${rr}${gr}${tn}${rl}</div>`;
 }
 function render(){
   const rows=DATA.filter(match);
