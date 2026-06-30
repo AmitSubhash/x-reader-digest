@@ -18,9 +18,14 @@ from .extract import ExtractedItem
 
 # The verdict is judged on two independent axes, per the user's request.
 RESEARCH_PROFILE = (
-    "Amit is an incoming PhD in neuroengineering: diffuse optical tomography (DOT), "
-    "fNIRS, neonatal brain imaging, Monte Carlo photon transport, inverse problems, "
-    "PyTorch/scientific Python, and ML for medical imaging."
+    "Amit is an incoming PhD in neuroengineering, but his interests are broad. Treat ALL of the "
+    "following as research-relevant (research_verdict READ/WATCH), not just his thesis topic: "
+    "diffuse optical tomography (DOT), fNIRS, neonatal and medical brain imaging, Monte Carlo "
+    "photon transport, and inverse problems; reinforcement learning (RL) of any flavor; machine "
+    "learning and deep learning broadly (architectures, training, theory, evals); computational and "
+    "medical imaging; and agent engineering / agentic AI / LLM tooling, orchestration, and prompting "
+    "(he builds a lot of this with Claude Max and enjoys it). Also count research-craft, "
+    "how-to-do-research, taste, and PhD advice. Lean toward READ when an item plausibly touches any of these."
 )
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
@@ -194,7 +199,7 @@ Return ONLY a JSON object, no prose, no code fences:
 - "headline": one short line naming what this is.
 - "context": for a CLAIM, 3 to 6 sentences that (a) restate the claim plainly, (b) identify and briefly explain any person, paper, lab, or concept referenced (who they are, what they did, and a couple of their key works if a researcher), and (c) explain why the claim was made or what background makes it make sense. For a resource, "".
 - "gist": for a resource ARTICLE or PDF, one sentence on what it argues. Else "".
-- "summary": for a resource VIDEO, an array of 3 to 5 short bullet strings. Else [].
+- "summary": for a resource VIDEO, an array of 3 to 5 short bullet strings. If it is a lecture or talk, be thorough and capture the main points actually taught (use the transcript). Else [].
 - "research_verdict": "READ"/"WATCH" or "SKIP", judged on relevance to Amit's research above. Count research-craft, how-to-do-research, taste, and PhD advice as research-relevant.
 - "research_reason": one sentence.
 - "general_verdict": "READ"/"WATCH" or "SKIP", judged on general signal and learning value.
@@ -202,6 +207,7 @@ Return ONLY a JSON object, no prose, no code fences:
 - "time_note": for videos, payoff versus runtime; else "".
 - "references": array (up to 4) of objects {{"name": str, "kind": "person"|"paper"|"lab"|"tool"|"concept"}} naming the people, papers, labs, tools, or concepts a curious reader should look up to understand this repost. [] if none.
 - "read_more": a short, specific web-search query (5 to 10 words) to dig deeper into the core topic.
+Never include code snippets, code blocks, shell commands, or config in any field; describe in prose instead.
 Do not use em dashes anywhere. Use commas or parentheses instead."""
 
 
