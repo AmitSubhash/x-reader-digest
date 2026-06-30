@@ -26,13 +26,13 @@
         <string>/Users/amit</string>
     </dict>
 
-    <!-- Run every morning at 06:30 so the draft is waiting when you wake. -->
+    <!-- Run every morning at 06:00 so the reading is ready when you wake. -->
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
         <integer>6</integer>
         <key>Minute</key>
-        <integer>30</integer>
+        <integer>0</integer>
     </dict>
 
     <key>StandardOutPath</key>

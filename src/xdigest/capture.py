@@ -134,10 +134,18 @@ async def _fetch(
     reposts: list[Repost] = []
     max_seen = last_id
 
+    consecutive_old = 0
     async for tweet in api.user_tweets(int(user_id), limit=limit):
         tweet_date = getattr(tweet, "date", None)
         if since_date is not None and tweet_date is not None and tweet_date.date() < since_date:
-            break  # timeline is newest first, so we are past the cutoff
+            # The timeline is mostly newest first, but a pinned tweet (or minor
+            # reordering) can place an old tweet near the top, so skip stray old
+            # tweets and only stop once we are clearly past the cutoff.
+            consecutive_old += 1
+            if consecutive_old >= 12:
+                break
+            continue
+        consecutive_old = 0
         if use_state and tweet.id <= last_id:
             continue
         max_seen = max(max_seen, tweet.id)

@@ -43,10 +43,15 @@ def _exclude(item) -> bool:
     return item.kind in {"tweet", "other"}
 
 
-def process_urls(urls: list[str], model: str) -> list[dict]:
-    """Extract and summarize each URL, skipping excluded links."""
+def process_urls(tasks: list[dict], model: str) -> list[dict]:
+    """Extract and summarize each link task, skipping excluded links.
+
+    Each task is {"url", "date", "id"}; the repost date and tweet id are stamped
+    onto the record so the site can sort and show when you reposted it.
+    """
     enriched: list[dict] = []
-    for url in urls:
+    for task in tasks:
+        url = task["url"]
         item = extract(url)
         if _exclude(item):
             print(f"  skip ({item.kind}{' pdf' if (item.meta or {}).get('pdf') else ''}): {url}")
@@ -54,6 +59,8 @@ def process_urls(urls: list[str], model: str) -> list[dict]:
         print("  ->", url)
         record = summarize_item(item, model=model)
         record["recommended"] = store.is_recommended(record)
+        record["date"] = task.get("date", "")
+        record["id"] = task.get("id", 0)
         enriched.append(record)
     return enriched
 
@@ -94,10 +101,13 @@ def _maybe_push_phone(config: dict, text: str) -> None:
         print(f"  [push] skipped: {exc}")
 
 
-def _gather_urls(args) -> tuple[list[str], int]:
-    """Return (urls, newest_tweet_id) for the chosen source."""
+def _gather_urls(args) -> tuple[list[dict], int]:
+    """Return (link_tasks, newest_tweet_id) for the chosen source.
+
+    Each task is {"url", "date", "id"} carrying the repost date and tweet id.
+    """
     if args.urls:
-        return list(dict.fromkeys(args.urls)), 0
+        return [{"url": u, "date": "", "id": 0} for u in dict.fromkeys(args.urls)], 0
     from .capture import fetch_backfill, fetch_new_reposts
 
     if args.since:
@@ -106,26 +116,32 @@ def _gather_urls(args) -> tuple[list[str], int]:
         advance = not args.dry_run and not args.no_state
         reposts = fetch_new_reposts(limit=args.limit, update_state=advance)
 
-    urls: list[str] = []
+    tasks: list[dict] = []
+    seen_urls: set[str] = set()
     newest = 0
     for repost in reposts:
         newest = max(newest, repost.tweet_id)
         for url in repost.urls:
-            if url not in urls:
-                urls.append(url)
-    return urls, newest
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            tasks.append({"url": url, "date": repost.date, "id": repost.tweet_id})
+    return tasks, newest
 
 
 def run(args) -> int:
     """Execute one run (daily or backfill). Returns a process exit code."""
     config = _load_config()
-    urls, newest = _gather_urls(args)
-    if not urls:
+    tasks, newest = _gather_urls(args)
+    if not args.urls:  # skip links already archived, so we never re-summarize
+        seen = store.load_seen_urls()
+        tasks = [t for t in tasks if t["url"] not in seen]
+    if not tasks:
         print("no new reposts with links; nothing to do")
         return 0
 
-    print(f"processing {len(urls)} link(s)")
-    enriched = process_urls(urls, args.model)
+    print(f"processing {len(tasks)} link(s)")
+    enriched = process_urls(tasks, args.model)
 
     # Split into genuinely new items (not yet archived) for the email.
     seen = store.load_seen_urls()
